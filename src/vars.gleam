@@ -1,0 +1,159 @@
+import gleam/io
+import gleam/option.{type Option, None, Some}
+import simplifile.{read_bits}
+import gleam/string
+import gleam/erlang.{type Reference}
+import image.{type ImageType, Image, MultiImage}
+import detect.{type Format, BMP, JPEG, JXL, PDF, PNG, PPM, TIFF, detect}
+import bmp
+
+type DecompressResult =
+  Result(#(BitArray, Int, Int, Int, Int, Option(BitArray)), String)
+
+@external(erlang, "imagex_c", "jpeg_decompress")
+fn jpeg_decompress(bytes: BitArray) -> DecompressResult
+
+@external(erlang, "imagex_c", "jpeg_decompress")
+fn jpeg_compress(
+  pixels: BitArray,
+  width: Int,
+  height: Int,
+  channels: Int,
+  quality: Int,
+) -> BitArray
+
+@external(erlang, "imagex_c", "png_decompress")
+fn png_decompress(bytes: BitArray) -> DecompressResult
+
+@external(erlang, "imagex_c", "png_compress")
+fn png_compress(
+  pixels: BitArray,
+  width: Int,
+  height: Int,
+  channels: Int,
+) -> BitArray
+
+@external(erlang, "imagex_c", "jxl_decompress")
+fn jxl_decompress(bytes: BitArray) -> DecompressResult
+
+@external(erlang, "imagex_c", "jxl_compress")
+fn jxl_compress(
+  pixels: BitArray,
+  width: Int,
+  height: Int,
+  channels: Int,
+  bit_depth: Int,
+  distance: Int,
+  lossless: Bool,
+  effort: Int,
+) -> BitArray
+
+@external(erlang, "imagex_c", "jxl_transcode_from_jpeg")
+fn jxl_transcode_from_jpeg(
+  jepg_bytes: BitArray,
+  effort: Int,
+  store_jpeg_metadata: Bool,
+) -> BitArray
+
+@external(erlang, "imagex_c", "jxl_transcode_to_jpeg")
+fn jxl_transcode_to_jpeg(jxl_bytes: BitArray) -> BitArray
+
+@external(erlang, "imagex_c", "pdf_load_document")
+fn pdf_load_document(bytes: BitArray) -> Result(#(Reference, Int), String)
+
+@external(erlang, "imagex_c", "pdf_render_page")
+fn pdf_render_page(ref: Reference, page_idx: Int, dpi: Int) -> DecompressResult
+
+@external(erlang, "imagex_c", "tiff_load_document")
+fn tiff_load_document(bytes: BitArray) -> Result(#(Reference, Int), String)
+
+@external(erlang, "imagex_c", "tiff_render_page")
+fn tiff_render_page(ref: Reference, page_idx: Int, dpi: Int) -> DecompressResult
+
+pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
+  case detect.detect(bytes) {
+    Some(JPEG) -> {
+      case jpeg_decompress(bytes) {
+        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
+          Ok(Image(pixels, width, height, channels, bit_depth))
+        }
+        Error(err) -> {
+          Error(err)
+        }
+      }
+    }
+
+    Some(PNG) -> {
+      case png_decompress(bytes) {
+        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
+          Ok(Image(pixels, width, height, channels, bit_depth))
+        }
+        Error(err) -> {
+          Error(err)
+        }
+      }
+    }
+
+    Some(JXL) -> {
+      case jxl_decompress(bytes) {
+        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
+          Ok(Image(pixels, width, height, channels, bit_depth))
+        }
+        Error(err) -> {
+          Error(err)
+        }
+      }
+    }
+
+    Some(BMP) -> {
+      bmp.decode(bytes)
+    }
+
+    Some(PPM) -> {
+      Error("not implemented")
+    }
+
+    Some(TIFF) -> {
+      case tiff_load_document(bytes) {
+        Ok(#(ref, num_pages)) -> {
+          Ok(MultiImage(ref, num_pages))
+        }
+        Error(err) -> {
+          Error(err)
+        }
+      }
+    }
+
+    Some(PDF) -> {
+      case pdf_load_document(bytes) {
+        Ok(#(ref, num_pages)) -> {
+          Ok(MultiImage(ref, num_pages))
+        }
+        Error(err) -> {
+          Error(err)
+        }
+      }
+    }
+
+    None -> Error("Unknown format")
+  }
+}
+
+pub fn main() {
+  io.println("Hey there!")
+  case read_bits("lena.jpg") {
+    Ok(data) -> {
+      case jpeg_decompress(data) {
+        Ok(#(pixels, width, height, channels, quality, _)) -> {
+          io.println("Done!")
+        }
+        Error(err) -> {
+          io.println("Error!")
+        }
+      }
+    }
+    Error(err) -> {
+      io.println(string.inspect(err))
+    }
+  }
+}
