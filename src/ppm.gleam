@@ -1,4 +1,4 @@
-import image.{type ImageType, Image, MultiImage}
+import image.{type ImageType, Image}
 import gleam/int
 import gleam/bit_array
 import gleam/string
@@ -41,12 +41,20 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
   case bytes {
     <<"P":utf8, n, "\n":utf8, rest:bytes>> if n == 53 || n == 54 -> {
       case read_line(rest) {
-        #(line, pixels) -> {
+        Ok(#(line, rest)) -> {
           case string.split(line, " ") {
-            [width_str, height_str, _max_value_str] -> {
+            [width_str, height_str] -> {
               case #(int.parse(width_str), int.parse(height_str)) {
                 #(Ok(width), Ok(height)) -> {
-                  Ok(Image(pixels, width, height, 3, 8))
+                  case read_line(rest) {
+                    Ok(#(_line, pixels)) -> {
+                      Ok(Image(pixels, width, height, 3, 8))
+                    }
+
+                    _ -> {
+                      Error("Invalid PPM")
+                    }
+                  }
                 }
 
                 _ -> {
@@ -73,28 +81,24 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
   }
 }
 
-fn read_line(bytes: BitArray) -> #(String, BitArray) {
+fn read_line(bytes: BitArray) -> Result(#(String, BitArray), Nil) {
   read_line_impl(bytes, 0)
 }
 
-fn read_line_impl(bytes: BitArray, i: Int) -> #(String, BitArray) {
+fn read_line_impl(bytes: BitArray, i: Int) -> Result(#(String, BitArray), Nil) {
   case bytes {
     <<line:bytes-size(i), "\n":utf8, rest:bytes>> -> {
-      case bit_array.to_string(line) {
-        Ok(str) -> #(str, <<>>)
-        Error(err) -> {
-          #("", bytes)
-        }
-      }
+      use str <- result.try(bit_array.to_string(line))
+      Ok(#(str, rest))
     }
 
     _ -> {
       case i >= bit_array.byte_size(bytes) {
         True -> {
           case bit_array.to_string(bytes) {
-            Ok(str) -> #(str, <<>>)
+            Ok(str) -> Ok(#(str, <<>>))
             Error(err) -> {
-              #("", bytes)
+              Error(err)
             }
           }
         }

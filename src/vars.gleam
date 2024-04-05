@@ -6,6 +6,7 @@ import gleam/erlang.{type Reference}
 import image.{type ImageType, Image, MultiImage}
 import detect.{type Format, BMP, JPEG, JXL, PDF, PNG, PPM, TIFF, detect}
 import bmp
+import ppm
 
 type DecompressResult =
   Result(#(BitArray, Int, Int, Int, Int, Option(BitArray)), String)
@@ -110,7 +111,7 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
     }
 
     Some(PPM) -> {
-      Error("not implemented")
+      ppm.decode(bytes)
     }
 
     Some(TIFF) -> {
