@@ -38,45 +38,31 @@ pub fn encode(
 }
 
 pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
+  decode_impl(bytes)
+  |> result.replace_error("Invalid PPM image")
+}
+
+pub fn decode_impl(bytes: BitArray) -> Result(ImageType, Nil) {
   case bytes {
     <<"P":utf8, n, "\n":utf8, rest:bytes>> if n == 53 || n == 54 -> {
-      case read_line(rest) {
-        Ok(#(line, rest)) -> {
-          case string.split(line, " ") {
-            [width_str, height_str] -> {
-              case #(int.parse(width_str), int.parse(height_str)) {
-                #(Ok(width), Ok(height)) -> {
-                  case read_line(rest) {
-                    Ok(#(_line, pixels)) -> {
-                      Ok(Image(pixels, width, height, 3, 8))
-                    }
+      use #(line, rest) <- result.try(read_line(rest))
 
-                    _ -> {
-                      Error("Invalid PPM")
-                    }
-                  }
-                }
-
-                _ -> {
-                  Error("Invalid PPM")
-                }
-              }
-            }
-
-            _ -> {
-              Error("Invalid PPM")
-            }
-          }
+      case string.split(line, " ") {
+        [width_str, height_str] -> {
+          use width <- result.try(int.parse(width_str))
+          use height <- result.try(int.parse(height_str))
+          use #(_line, pixels) <- result.try(read_line(rest))
+          Ok(Image(pixels, width, height, 3, 8))
         }
 
         _ -> {
-          Error("Invalid PPM")
+          Error(Nil)
         }
       }
     }
 
     _ -> {
-      Error("Invalid PPM")
+      Error(Nil)
     }
   }
 }
@@ -95,12 +81,8 @@ fn read_line_impl(bytes: BitArray, i: Int) -> Result(#(String, BitArray), Nil) {
     _ -> {
       case i >= bit_array.byte_size(bytes) {
         True -> {
-          case bit_array.to_string(bytes) {
-            Ok(str) -> Ok(#(str, <<>>))
-            Error(err) -> {
-              Error(err)
-            }
-          }
+          use str <- result.try(bit_array.to_string(bytes))
+          Ok(#(str, <<>>))
         }
 
         False -> read_line_impl(bytes, i + 1)

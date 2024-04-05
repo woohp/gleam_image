@@ -3,6 +3,7 @@ import gleam/option.{type Option, None, Some}
 import simplifile.{read_bits}
 import gleam/string
 import gleam/erlang.{type Reference}
+import gleam/result
 import image.{type ImageType, Image, MultiImage}
 import detect.{type Format, BMP, JPEG, JXL, PDF, PNG, PPM, TIFF, detect}
 import bmp
@@ -74,36 +75,24 @@ fn tiff_render_page(ref: Reference, page_idx: Int, dpi: Int) -> DecompressResult
 pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
   case detect.detect(bytes) {
     Some(JPEG) -> {
-      case jpeg_decompress(bytes) {
-        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
-          Ok(Image(pixels, width, height, channels, bit_depth))
-        }
-        Error(err) -> {
-          Error(err)
-        }
-      }
+      use #(pixels, width, height, channels, bit_depth, _) <- result.try(
+        jpeg_decompress(bytes),
+      )
+      Ok(Image(pixels, width, height, channels, bit_depth))
     }
 
     Some(PNG) -> {
-      case png_decompress(bytes) {
-        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
-          Ok(Image(pixels, width, height, channels, bit_depth))
-        }
-        Error(err) -> {
-          Error(err)
-        }
-      }
+      use #(pixels, width, height, channels, bit_depth, _) <- result.try(
+        png_decompress(bytes),
+      )
+      Ok(Image(pixels, width, height, channels, bit_depth))
     }
 
     Some(JXL) -> {
-      case jxl_decompress(bytes) {
-        Ok(#(pixels, width, height, channels, bit_depth, _)) -> {
-          Ok(Image(pixels, width, height, channels, bit_depth))
-        }
-        Error(err) -> {
-          Error(err)
-        }
-      }
+      use #(pixels, width, height, channels, bit_depth, _) <- result.try(
+        jxl_decompress(bytes),
+      )
+      Ok(Image(pixels, width, height, channels, bit_depth))
     }
 
     Some(BMP) -> {
@@ -115,25 +104,13 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
     }
 
     Some(TIFF) -> {
-      case tiff_load_document(bytes) {
-        Ok(#(ref, num_pages)) -> {
-          Ok(MultiImage(ref, num_pages))
-        }
-        Error(err) -> {
-          Error(err)
-        }
-      }
+      use #(ref, num_pages) <- result.try(tiff_load_document(bytes))
+      Ok(MultiImage(ref, num_pages))
     }
 
     Some(PDF) -> {
-      case pdf_load_document(bytes) {
-        Ok(#(ref, num_pages)) -> {
-          Ok(MultiImage(ref, num_pages))
-        }
-        Error(err) -> {
-          Error(err)
-        }
-      }
+      use #(ref, num_pages) <- result.try(pdf_load_document(bytes))
+      Ok(MultiImage(ref, num_pages))
     }
 
     None -> Error("Unknown format")
