@@ -12,7 +12,7 @@ pub type Format {
 
 pub fn detect(bytes: BitArray) -> Option(Format) {
   case bytes {
-    <<0xFFD8:size(16), _rest:bytes>> -> Some(JPEG)
+    <<0xFFD8:size(16), _rest:bits>> -> Some(JPEG)
 
     <<0x89, "PNG\r\n":utf8, 0x1A, 0x0A, _rest:bytes>> -> Some(PNG)
 
@@ -30,8 +30,9 @@ pub fn detect(bytes: BitArray) -> Option(Format) {
 
     <<"MM":utf8, 0x002A:size(16), _rest:bytes>> -> Some(TIFF)
 
-    <<"%PDF-1.":utf8, n:size(8), "\n%":utf8, _rest:bytes>> if n >= 48 && n <= 57 ->
-      Some(PDF)
+    <<"%PDF-1.":utf8, n:size(8), "\n%":utf8, _rest:bytes>>
+      if n >= 48 && n <= 57
+    -> Some(PDF)
 
     _ -> None
   }

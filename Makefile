@@ -25,3 +25,4 @@ clean:
 
 fmt:
 	find native/src -type f | xargs clang-format -i
+	gleam format

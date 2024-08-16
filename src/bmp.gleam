@@ -1,4 +1,5 @@
 import gleam/bit_array.{byte_size}
+import gleam/int
 import gleam/io
 import gleam/list
 import image.{type ImageType, Image}
@@ -8,24 +9,26 @@ pub fn encode(
   width: Int,
   height: Int,
   channels: Int,
+  bit_depth: Int,
 ) -> Result(BitArray, String) {
-  let total_file_size = 14 + 40 + byte_size(pixels)
+  case #(channels, bit_depth) {
+    #(3, 8) | #(4, 8) -> {
+      let total_file_size = 14 + 40 + byte_size(pixels)
+      let bits_per_pixel = channels * bit_depth
 
-  case channels {
-    3 -> {
       let out = <<
         // bitmap file header (14 bytes)
         "BM":utf8,
         total_file_size:32-little,
         0:16,
         0:16,
-        52:32-little,
+        54:32-little,
         // DIB header (40 bytes)
         40:32-little,
         width:32-little,
         height:32-little,
         1:16-little,
-        24:16-little,
+        bits_per_pixel:16-little,
         0:32,
         0:32,
         2834:32-little,
@@ -40,7 +43,7 @@ pub fn encode(
     }
 
     _ -> {
-      Error("Only works with 3 channels")
+      Error("Only works with 3 or 4 channels and 8 bit depth")
     }
   }
 }
@@ -55,7 +58,7 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
       _:16,
       offset_to_pixels:32-little,
       // DIB header (we only parse a subset of it)
-      _dib_header_size:32-little,
+      dib_header_size:32-little,
       width:signed-32-little,
       height:signed-32-little,
       1:16-little,
@@ -63,8 +66,10 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
       0:32,
       // everything else
       _rest:bytes,
-    >> -> {
-      // TODO: need to check that _dib_header_size is 40 or 56
+    >>
+      if { dib_header_size == 40 || dib_header_size == 124 }
+      && { bits_per_pixel == 24 || bits_per_pixel == 32 }
+    -> {
       let assert <<_header:bytes-size(offset_to_pixels), pixels:bytes>> = bytes
 
       let channels = bits_per_pixel / 8
@@ -88,7 +93,7 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
         }
       }
 
-      Ok(Image(pixels, width, height, channels, bits_per_pixel))
+      Ok(Image(pixels, width, int.absolute_value(height), channels, 8))
     }
 
     _ -> {

@@ -1,17 +1,18 @@
-import image.{type ImageType, Image}
-import gleam/int
 import gleam/bit_array
-import gleam/string
+import gleam/int
 import gleam/result
+import gleam/string
+import image.{type ImageType, Image}
 
 pub fn encode(
   pixels: BitArray,
   width: Int,
   height: Int,
   channels: Int,
+  bit_depth: Int,
 ) -> Result(BitArray, String) {
-  case channels {
-    1 -> {
+  case #(channels, bit_depth) {
+    #(1, 8) -> {
       let header: String =
         "P5\n"
         <> int.to_string(width)
@@ -21,7 +22,7 @@ pub fn encode(
       Ok(<<header:utf8, pixels:bits>>)
     }
 
-    3 -> {
+    #(3, 8) -> {
       let header =
         "P6\n"
         <> int.to_string(width)
