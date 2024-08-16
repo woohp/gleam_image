@@ -93,7 +93,7 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
         }
       }
 
-      Ok(Image(pixels, width, int.absolute_value(height), channels, 8))
+      Ok(Image(pixels:, width:, height: int.absolute_value(height), channels:, bit_depth: 8))
     }
 
     _ -> {

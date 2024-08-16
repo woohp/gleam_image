@@ -53,7 +53,7 @@ pub fn decode_impl(bytes: BitArray) -> Result(ImageType, Nil) {
           use width <- result.try(int.parse(width_str))
           use height <- result.try(int.parse(height_str))
           use #(_line, pixels) <- result.try(read_line(rest))
-          Ok(Image(pixels, width, height, 3, 8))
+          Ok(Image(pixels:, width:, height:, channels: 3, bit_depth: 8))
         }
 
         _ -> {

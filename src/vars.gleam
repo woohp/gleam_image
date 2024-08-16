@@ -81,21 +81,21 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
       use #(pixels, width, height, channels, bit_depth, _) <- result.try(
         jpeg_decompress(bytes),
       )
-      Ok(Image(pixels, width, height, channels, bit_depth))
+      Ok(Image(pixels:, width:, height:, channels:, bit_depth:))
     }
 
     Some(PNG) -> {
       use #(pixels, width, height, channels, bit_depth, _) <- result.try(
         png_decompress(bytes),
       )
-      Ok(Image(pixels, width, height, channels, bit_depth))
+      Ok(Image(pixels:, width:, height:, channels:, bit_depth:))
     }
 
     Some(JXL) -> {
       use #(pixels, width, height, channels, bit_depth, _) <- result.try(
         jxl_decompress(bytes),
       )
-      Ok(Image(pixels, width, height, channels, bit_depth))
+      Ok(Image(pixels:, width:, height:, channels:, bit_depth:))
     }
 
     Some(BMP) -> {
@@ -108,12 +108,12 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
 
     Some(TIFF) -> {
       use #(ref, num_pages) <- result.try(tiff_load_document(bytes))
-      Ok(MultiImage(ref, num_pages))
+      Ok(MultiImage(ref:, num_pages:))
     }
 
     Some(PDF) -> {
       use #(ref, num_pages) <- result.try(pdf_load_document(bytes))
-      Ok(MultiImage(ref, num_pages))
+      Ok(MultiImage(ref:, num_pages:))
     }
 
     None -> Error("Unknown format")
@@ -122,7 +122,7 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
 
 pub fn encode(image: ImageType, format: Format) -> Result(BitArray, String) {
   case image {
-    Image(pixels, width, height, channels, bit_depth) -> {
+    Image(pixels:, width:, height:, channels:, bit_depth:) -> {
       case format {
         JPEG -> jpeg_compress(pixels, width, height, channels, 9)
         PNG -> png_compress(pixels, width, height, channels, bit_depth)
