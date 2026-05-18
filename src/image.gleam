@@ -8,5 +8,6 @@ pub type ImageType {
     channels: Int,
     bit_depth: Int,
   )
-  MultiImage(ref: Reference, num_pages: Int)
+  PDFImage(ref: Reference, num_pages: Int)
+  TIFFImage(ref: Reference, num_pages: Int)
 }

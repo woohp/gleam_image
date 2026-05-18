@@ -1,5 +1,6 @@
 name = "vars"
 version = "1.0.0"
+gleam = ">= 1.16.0"
 
 # Fill out these fields if you intend to generate HTML documentation or publish
 # your project to the Hex package manager.
@@ -15,8 +16,8 @@ version = "1.0.0"
 [dependencies]
 gleam_stdlib = "~> 0.34 or ~> 1.0"
 gleam_erlang = "~> 0.25"
+simplifile = "~> 1.6"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"
-simplifile = "~> 1.6"
 rebar3_format = "~> 1.3"

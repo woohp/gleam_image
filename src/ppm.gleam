@@ -11,8 +11,8 @@ pub fn encode(
   channels: Int,
   bit_depth: Int,
 ) -> Result(BitArray, String) {
-  case #(channels, bit_depth) {
-    #(1, 8) -> {
+  case channels, bit_depth {
+    1, 8 -> {
       let header: String =
         "P5\n"
         <> int.to_string(width)
@@ -22,7 +22,7 @@ pub fn encode(
       Ok(<<header:utf8, pixels:bits>>)
     }
 
-    #(3, 8) -> {
+    3, 8 -> {
       let header =
         "P6\n"
         <> int.to_string(width)
@@ -32,7 +32,7 @@ pub fn encode(
       Ok(<<header:utf8, pixels:bits>>)
     }
 
-    _ -> {
+    _, _ -> {
       Error("Only works with 1 or 3 channels")
     }
   }

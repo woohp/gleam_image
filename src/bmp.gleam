@@ -1,6 +1,5 @@
 import gleam/bit_array.{byte_size}
 import gleam/int
-import gleam/io
 import gleam/list
 import image.{type ImageType, Image}
 
@@ -11,8 +10,8 @@ pub fn encode(
   channels: Int,
   bit_depth: Int,
 ) -> Result(BitArray, String) {
-  case #(channels, bit_depth) {
-    #(3, 8) | #(4, 8) -> {
+  case channels, bit_depth {
+    3, 8 | 4, 8 -> {
       let total_file_size = 14 + 40 + byte_size(pixels)
       let bits_per_pixel = channels * bit_depth
 
@@ -42,7 +41,7 @@ pub fn encode(
       Ok(out)
     }
 
-    _ -> {
+    _, _ -> {
       Error("Only works with 3 or 4 channels and 8 bit depth")
     }
   }
@@ -93,7 +92,13 @@ pub fn decode(bytes: BitArray) -> Result(ImageType, String) {
         }
       }
 
-      Ok(Image(pixels:, width:, height: int.absolute_value(height), channels:, bit_depth: 8))
+      Ok(Image(
+        pixels:,
+        width:,
+        height: int.absolute_value(height),
+        channels:,
+        bit_depth: 8,
+      ))
     }
 
     _ -> {
