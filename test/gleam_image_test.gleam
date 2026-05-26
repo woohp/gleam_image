@@ -3,16 +3,16 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
-import gleeunit
-import gleeunit/should
-import simplifile.{read_bits}
-import vars.{
+import gleam_image.{
   type RasterImage, Bmp, Jpeg, Jxl, NativeError, Pdf, PdfFormat, Png, Ppm,
   Raster, RasterFormat, RasterImage, Tiff, TiffFormat, UnknownFormat, decode,
   decode_raster, default_jxl_transcode_options, detect, encode,
   jxl_transcode_from_jpeg, jxl_transcode_to_jpeg, pdf_pages, read, read_raster,
   render_pdf_page, render_tiff_page, tiff_pages,
 }
+import gleeunit
+import gleeunit/should
+import simplifile.{read_bits}
 
 pub fn main() {
   gleeunit.main()

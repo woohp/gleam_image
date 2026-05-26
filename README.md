@@ -1,4 +1,4 @@
-# vars
+# gleam_image
 
 Load and save images from Gleam, using libjpeg, libpng, libjxl, libtiff, and poppler as native backends.
 Formats supported include JPEG, PNG, BMP, JPEG XL, PPM, TIFF, and PDF.
@@ -10,7 +10,7 @@ Where possible, yielding NIFs are used so the native work plays nicely with the 
 Please ensure that libjpeg, libpng, libjxl, libtiff, and libpoppler are installed.
 
 ```sh
-gleam add vars
+gleam add gleam_image
 ```
 
 This package targets Erlang and requires Gleam 1.16 or newer.
@@ -20,7 +20,7 @@ This package targets Erlang and requires Gleam 1.16 or newer.
 To load a raster image file:
 
 ```gleam
-import vars.{RasterImage, read_raster}
+import gleam_image.{RasterImage, read_raster}
 
 pub fn main() {
   let assert Ok(RasterImage(pixels, width, height, channels, bit_depth)) =
@@ -32,7 +32,7 @@ Or load from memory:
 
 ```gleam
 import simplifile
-import vars.{Raster, RasterImage, decode}
+import gleam_image.{Raster, RasterImage, decode}
 
 pub fn main() {
   let assert Ok(bytes) = simplifile.read_bits("lena.jpg")
@@ -46,7 +46,7 @@ Detect a format without decoding:
 
 ```gleam
 import gleam/option.{Some}
-import vars.{Jpeg, RasterFormat, detect}
+import gleam_image.{Jpeg, RasterFormat, detect}
 
 pub fn is_jpeg(bytes) {
   detect(bytes) == Some(RasterFormat(Jpeg))
@@ -56,7 +56,7 @@ pub fn is_jpeg(bytes) {
 Save to memory in a specific raster format using default options:
 
 ```gleam
-import vars.{Bmp, Jpeg, Jxl, Png, Ppm, encode}
+import gleam_image.{Bmp, Jpeg, Jxl, Png, Ppm, encode}
 
 pub fn encode_examples(image) {
   let assert Ok(jpeg_bytes) = encode(image, Jpeg)
@@ -71,7 +71,7 @@ To write encoded bytes to a file, use `simplifile`:
 
 ```gleam
 import simplifile
-import vars.{Png, encode}
+import gleam_image.{Png, encode}
 
 pub fn save_png(image) {
   let assert Ok(bytes) = encode(image, Png)
@@ -103,7 +103,7 @@ Typical channel counts are 1, 2, 3, or 4. Typical bit depths are 8 or 16, depend
 
 ## Decode results
 
-`vars.decode` and `vars.read` return typed data:
+`gleam_image.decode` and `gleam_image.read` return typed data:
 
 ```gleam
 pub type Decoded {
@@ -123,7 +123,7 @@ For encoder-specific options use `encode_jpeg`, `encode_png`, or `encode_jxl` wi
 
 ```gleam
 import gleam/option.{None}
-import vars.{JpegEncodeOptions, default_jpeg_encode_options, encode_jpeg}
+import gleam_image.{JpegEncodeOptions, default_jpeg_encode_options, encode_jpeg}
 
 pub fn encode_high_quality_jpeg(image) {
   let defaults = default_jpeg_encode_options()
@@ -152,7 +152,7 @@ pub type JpegEncodeOptions {
 PNG text chunks use `String` fields:
 
 ```gleam
-import vars.{
+import gleam_image.{
   PngEncodeOptions, PngTextChunk, default_png_encode_options, encode_png,
 }
 
@@ -164,7 +164,7 @@ pub fn encode_png_with_text(image) {
       text_chunks: [
         PngTextChunk(
           keyword: "Author",
-          text: "vars",
+          text: "gleam_image",
           language_tag: "",
           translated_keyword: "",
         ),
@@ -179,7 +179,7 @@ pub fn encode_png_with_text(image) {
 
 ```gleam
 import gleam/option.{Some}
-import vars.{JxlEncodeOptions, default_jxl_encode_options, encode_jxl}
+import gleam_image.{JxlEncodeOptions, default_jxl_encode_options, encode_jxl}
 
 pub fn encode_lossless_jxl(image, exif) {
   let defaults = default_jxl_encode_options()
@@ -205,7 +205,7 @@ PDF pages render at the requested DPI. TIFF pages render at their stored resolut
 
 ```gleam
 import gleam/list
-import vars.{Pdf, RasterImage, pdf_pages, read, render_pdf_page}
+import gleam_image.{Pdf, RasterImage, pdf_pages, read, render_pdf_page}
 
 pub fn render_pdf() {
   let assert Ok(Pdf(pdf)) = read("lena.pdf")
@@ -220,7 +220,7 @@ pub fn render_pdf() {
 
 ```gleam
 import gleam/list
-import vars.{RasterImage, Tiff, read, render_tiff_page, tiff_pages}
+import gleam_image.{RasterImage, Tiff, read, render_tiff_page, tiff_pages}
 
 pub fn render_tiff() {
   let assert Ok(Tiff(tiff)) = read("lena.tiff")
@@ -237,7 +237,7 @@ pub fn render_tiff() {
 JPEG XL lossless JPEG transcoding is exposed directly:
 
 ```gleam
-import vars.{
+import gleam_image.{
   default_jxl_transcode_options, jxl_transcode_from_jpeg,
   jxl_transcode_to_jpeg,
 }
@@ -253,7 +253,7 @@ pub fn transcode(jpeg_bytes) {
 
 The native backend is based on Imagex's current native implementation, including support for JPEG EXIF/XMP, PNG text chunks, and JXL boxes internally.
 
-The current Gleam API does **not yet expose decoded metadata** on `vars.RasterImage`. Encode APIs expose a small set of metadata-related options where already supported by the backend:
+The current Gleam API does **not yet expose decoded metadata** on `gleam_image.RasterImage`. Encode APIs expose a small set of metadata-related options where already supported by the backend:
 
 - JPEG: EXIF and XMP write via `JpegEncodeOptions`
 - PNG: text chunk write via `PngEncodeOptions`
@@ -263,7 +263,7 @@ A fuller metadata model will require a Gleam metadata type/API and tests before 
 
 ## Errors
 
-Errors are typed with `vars.Error` rather than returned as strings:
+Errors are typed with `gleam_image.Error` rather than returned as strings:
 
 ```gleam
 pub type Error {

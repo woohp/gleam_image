@@ -10,7 +10,7 @@
 -on_load(init/0).
 
 init() ->
-    PrivDir = case code:priv_dir(vars) of
+    PrivDir = case code:priv_dir(gleam_image) of
         {error, bad_name} -> "priv";
         Dir -> Dir
     end,

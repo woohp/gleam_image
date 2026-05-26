@@ -2,11 +2,11 @@ import gleam/erlang.{type Reference}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam_image/internal/bmp
+import gleam_image/internal/detect as internal_detect
+import gleam_image/internal/image.{type ImageType, Image, PDFImage, TIFFImage}
+import gleam_image/internal/ppm
 import simplifile.{type FileError, read_bits}
-import vars/internal/bmp
-import vars/internal/detect as internal_detect
-import vars/internal/image.{type ImageType, Image, PDFImage, TIFFImage}
-import vars/internal/ppm
 
 pub type RasterImage {
   RasterImage(

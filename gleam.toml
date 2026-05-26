@@ -1,4 +1,4 @@
-name = "vars"
+name = "gleam_image"
 version = "1.0.0"
 gleam = ">= 1.16.0"
 
