@@ -1,7 +1,7 @@
 import gleam/bit_array.{byte_size}
 import gleam/int
 import gleam/list
-import image.{type ImageType, Image}
+import vars/internal/image.{type ImageType, Image}
 
 pub fn encode(
   pixels: BitArray,
