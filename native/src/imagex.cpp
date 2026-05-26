@@ -919,7 +919,7 @@ expected<vector<uint8_t>, string_view> jxl_compress(
     uint32_t channels,
     uint32_t bit_depth,
     gleam::option<binary> exif_binary,
-    gleam::option<vector<pair<string, binary>>> jxl_boxes,
+    vector<pair<string, binary>> jxl_boxes,
     double distance,
     bool lossless,
     int effort,
@@ -932,7 +932,7 @@ expected<vector<uint8_t>, string_view> jxl_compress(
     auto enc = JxlEncoderMake(/*memory_manager=*/nullptr);
     JXL_ENSURE_SUCCESS(JxlEncoderSetParallelRunner, enc.get(), JxlThreadParallelRunner, runner.get());
 
-    if (exif_binary || jxl_boxes)
+    if (exif_binary || !jxl_boxes.empty())
         JXL_ENSURE_SUCCESS(JxlEncoderUseBoxes, enc.get());
 
     JxlPixelFormat pixel_format = {channels, bit_depth == 16 ? JXL_TYPE_UINT16 : JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
@@ -975,17 +975,14 @@ expected<vector<uint8_t>, string_view> jxl_compress(
         JXL_ENSURE_SUCCESS(JxlEncoderAddBox, enc.get(), exif_box_type, exif_box.data(), exif_box.size(), JXL_FALSE);
     }
 
-    if (jxl_boxes)
+    for (const auto& [box_type_string, box_contents] : jxl_boxes)
     {
-        for (const auto& [box_type_string, box_contents] : *jxl_boxes)
-        {
-            optional<array<char, 4>> box_type = jxl_box_type_from_string(box_type_string);
-            if (!box_type.has_value())
-                return std::unexpected("unsupported JXL metadata box type");
+        optional<array<char, 4>> box_type = jxl_box_type_from_string(box_type_string);
+        if (!box_type.has_value())
+            return std::unexpected("unsupported JXL metadata box type");
 
-            JXL_ENSURE_SUCCESS(
-                JxlEncoderAddBox, enc.get(), box_type->data(), box_contents.data, box_contents.size, JXL_FALSE);
-        }
+        JXL_ENSURE_SUCCESS(
+            JxlEncoderAddBox, enc.get(), box_type->data(), box_contents.data, box_contents.size, JXL_FALSE);
     }
 
     JXL_ENSURE_SUCCESS(JxlEncoderAddImageFrame, encoder_options, &pixel_format, pixels.data, pixels.size);

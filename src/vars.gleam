@@ -182,7 +182,7 @@ fn jxl_compress(
   channels: Int,
   bit_depth: Int,
   exif: Option(BitArray),
-  boxes: Option(List(#(String, BitArray))),
+  boxes: List(#(String, BitArray)),
   distance: Float,
   lossless: Bool,
   effort: Int,
@@ -338,7 +338,7 @@ pub fn encode_jxl(
     channels,
     bit_depth,
     exif,
-    jxl_boxes(boxes),
+    list.map(boxes, to_jxl_box),
     distance,
     lossless,
     effort,
@@ -402,13 +402,6 @@ fn to_text_chunk(chunk: PngTextChunk) -> TextChunk {
   #(<<keyword:utf8>>, <<text:utf8>>, <<language_tag:utf8>>, <<
     translated_keyword:utf8,
   >>)
-}
-
-fn jxl_boxes(boxes: List(JxlBox)) -> Option(List(#(String, BitArray))) {
-  case boxes {
-    [] -> None
-    _ -> Some(list.map(boxes, to_jxl_box))
-  }
 }
 
 fn to_jxl_box(box: JxlBox) -> #(String, BitArray) {
