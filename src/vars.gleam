@@ -49,6 +49,7 @@ pub type RasterFormat {
 pub type Error {
   UnknownFormat
   InvalidImage(String)
+  InvalidOptions(String)
   FileError(FileError)
   NativeError(String)
 }
@@ -280,8 +281,13 @@ pub fn encode_jpeg(
 ) -> Result(BitArray, Error) {
   let RasterImage(pixels:, width:, height:, channels:, bit_depth: _) = image
   let JpegEncodeOptions(quality:, exif:, xmp:) = options
-  jpeg_compress(pixels, width, height, channels, quality, exif, xmp)
-  |> result.map_error(NativeError)
+
+  case quality < 1 || quality > 100 {
+    True -> Error(InvalidOptions("JPEG quality must be between 1 and 100"))
+    False ->
+      jpeg_compress(pixels, width, height, channels, quality, exif, xmp)
+      |> result.map_error(NativeError)
+  }
 }
 
 pub fn default_png_encode_options() -> PngEncodeOptions {
@@ -365,6 +371,16 @@ pub fn render_tiff_page(
   render_page(tiff_render_page_data(ref, page_index))
 }
 
+pub fn pdf_pages(document: PdfDocument) -> Int {
+  let PdfDocument(_, pages) = document
+  pages
+}
+
+pub fn tiff_pages(document: TiffDocument) -> Int {
+  let TiffDocument(_, pages) = document
+  pages
+}
+
 pub fn read(path: String) -> Result(Decoded, Error) {
   case read_bits(path) {
     Ok(data) -> decode(data)
@@ -431,16 +447,6 @@ fn decode_raster_format(
       Ok(Raster(RasterImage(pixels:, width:, height:, channels:, bit_depth:)))
     _ -> Error(InvalidImage("Expected a raster image"))
   }
-}
-
-pub fn pdf_pages(document: PdfDocument) -> Int {
-  let PdfDocument(_, pages) = document
-  pages
-}
-
-pub fn tiff_pages(document: TiffDocument) -> Int {
-  let TiffDocument(_, pages) = document
-  pages
 }
 
 fn decode_document(
