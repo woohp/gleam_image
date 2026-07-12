@@ -4,9 +4,10 @@ import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import gleam_image.{
-  type RasterImage, Bmp, Jpeg, Jxl, NativeError, Pdf, PdfFormat, Png, Ppm,
-  Raster, RasterFormat, RasterImage, Tiff, TiffFormat, UnknownFormat, decode,
-  decode_raster, default_jxl_transcode_options, detect, encode,
+  type RasterImage, Bmp, InvalidOptions, Jpeg, Jxl, JxlEncodeOptions,
+  NativeError, Pdf, PdfFormat, Png, Ppm, Raster, RasterFormat, RasterImage, Tiff,
+  TiffFormat, UnknownFormat, decode, decode_raster,
+  default_jxl_transcode_options, detect, encode, encode_jxl,
   jxl_transcode_from_jpeg, jxl_transcode_to_jpeg, pdf_pages, read, read_raster,
   render_pdf_page, render_tiff_page, tiff_pages,
 }
@@ -232,6 +233,25 @@ pub fn jxl_encode_rgb_test() {
   let assert Ok(jpeg_bytes) = read_bits("test/assets/lena.ppm")
   { byte_size(jxl_bytes) < byte_size(jpeg_bytes) }
   |> should.be_true()
+}
+
+pub fn jxl_encode_lossy_distance_zero_error_test() {
+  let assert Ok(image) = read_raster("test/assets/lena.ppm")
+  let options =
+    JxlEncodeOptions(
+      exif: None,
+      boxes: [],
+      distance: 0.0,
+      lossless: False,
+      effort: 7,
+      progressive: 1,
+      order: 1,
+    )
+
+  encode_jxl(image, options)
+  |> should.equal(
+    Error(InvalidOptions("JXL distance 0 requires lossless: True")),
+  )
 }
 
 // pub fn jxl_encode_rgba_roundtrip_test() {

@@ -337,21 +337,27 @@ pub fn encode_jxl(
     progressive:,
     order:,
   ) = options
-  jxl_compress(
-    pixels,
-    width,
-    height,
-    channels,
-    bit_depth,
-    exif,
-    list.map(boxes, to_jxl_box),
-    distance,
-    lossless,
-    effort,
-    progressive,
-    order,
-  )
-  |> result.map_error(NativeError)
+
+  case lossless, distance {
+    False, 0.0 ->
+      Error(InvalidOptions("JXL distance 0 requires lossless: True"))
+    _, _ ->
+      jxl_compress(
+        pixels,
+        width,
+        height,
+        channels,
+        bit_depth,
+        exif,
+        list.map(boxes, to_jxl_box),
+        distance,
+        lossless,
+        effort,
+        progressive,
+        order,
+      )
+      |> result.map_error(NativeError)
+  }
 }
 
 pub fn render_pdf_page(
