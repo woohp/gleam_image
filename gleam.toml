@@ -20,4 +20,3 @@ simplifile = "~> 1.6"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"
-rebar3_format = "~> 1.3"
