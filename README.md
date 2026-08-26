@@ -99,7 +99,7 @@ Pixels are interleaved, row-major, and tightly packed with no stride or row padd
 
 Typical channel counts are 1, 2, 3, or 4. Typical bit depths are 8 or 16, depending on the source format and encoder support.
 
-`RasterImage` is currently public data so callers can pattern match and construct pixel buffers directly. The API also includes `raster_image`, `pixels`, `width`, `height`, `channels`, and `bit_depth` helpers so callers can use an accessor style that will be easier to preserve if a future major API grows toward a richer tensor/metadata representation.
+`RasterImage` is public data, so callers pattern match and construct pixel buffers directly.
 
 ## Decode results
 
@@ -251,15 +251,39 @@ pub fn transcode(jpeg_bytes) {
 
 ## Metadata
 
-The native backend is based on Imagex's current native implementation, including support for JPEG EXIF/XMP, PNG text chunks, and JXL boxes internally.
+Encode options accept metadata where the backend supports writing it:
 
-The current Gleam API does **not yet expose decoded metadata** on `gleam_image.RasterImage`. Encode APIs expose a small set of metadata-related options where already supported by the backend:
+- JPEG: EXIF and XMP via `JpegEncodeOptions`
+- PNG: text chunks via `PngEncodeOptions`
+- JPEG XL: EXIF and container boxes via `JxlEncodeOptions`
 
-- JPEG: EXIF and XMP write via `JpegEncodeOptions`
-- PNG: text chunk write via `PngEncodeOptions`
-- JPEG XL: EXIF and container box write via `JxlEncodeOptions`
+Use `decode_raster_with_metadata` to read metadata back when decoding:
 
-A fuller metadata model will require a Gleam metadata type/API and tests before it is considered public.
+```gleam
+import gleam_image.{decode_raster_with_metadata}
+
+pub fn read_exif(bytes) {
+  let assert Ok(#(_image, metadata)) = decode_raster_with_metadata(bytes)
+  metadata.exif
+}
+```
+
+```gleam
+pub type RasterMetadata {
+  RasterMetadata(
+    exif: Option(BitArray),
+    text_chunks: List(PngTextChunk),
+    xml_boxes: List(BitArray),
+    jumb_boxes: List(BitArray),
+  )
+}
+```
+
+Which fields are populated depends on the source format:
+
+- PNG fills `exif` and `text_chunks`.
+- JPEG XL fills `exif`, `xml_boxes`, and `jumb_boxes`.
+- JPEG, BMP, and PPM currently yield empty metadata (the native backend does not read JPEG EXIF yet).
 
 ## Errors
 

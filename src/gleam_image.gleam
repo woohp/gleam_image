@@ -1,10 +1,12 @@
+import gleam/bit_array
 import gleam/erlang.{type Reference}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam_image/internal/bmp
-import gleam_image/internal/detect as internal_detect
-import gleam_image/internal/image.{type ImageType, Image, PDFImage, TIFFImage}
+import gleam_image/internal/image.{
+  type Image, type PdfHandle, type TiffHandle, Image, PDFImage, TIFFImage,
+}
 import gleam_image/internal/ppm
 import simplifile.{type FileError, read_bits}
 
@@ -15,6 +17,19 @@ pub type RasterImage {
     height: Int,
     channels: Int,
     bit_depth: Int,
+  )
+}
+
+/// Metadata extracted while decoding a raster image. Which fields are
+/// populated depends on the source format: PNG can carry EXIF and text
+/// chunks, JXL can carry EXIF and xml/jumb boxes. JPEG, BMP, and PPM
+/// currently yield no metadata.
+pub type RasterMetadata {
+  RasterMetadata(
+    exif: Option(BitArray),
+    text_chunks: List(PngTextChunk),
+    xml_boxes: List(BitArray),
+    jumb_boxes: List(BitArray),
   )
 }
 
@@ -89,41 +104,6 @@ pub type JxlEncodeOptions {
 
 pub type JxlTranscodeOptions {
   JxlTranscodeOptions(effort: Int, store_jpeg_metadata: Bool)
-}
-
-pub fn raster_image(
-  pixels: BitArray,
-  width width: Int,
-  height height: Int,
-  channels channels: Int,
-  bit_depth bit_depth: Int,
-) -> RasterImage {
-  RasterImage(pixels:, width:, height:, channels:, bit_depth:)
-}
-
-pub fn pixels(image: RasterImage) -> BitArray {
-  let RasterImage(pixels:, ..) = image
-  pixels
-}
-
-pub fn width(image: RasterImage) -> Int {
-  let RasterImage(width:, ..) = image
-  width
-}
-
-pub fn height(image: RasterImage) -> Int {
-  let RasterImage(height:, ..) = image
-  height
-}
-
-pub fn channels(image: RasterImage) -> Int {
-  let RasterImage(channels:, ..) = image
-  channels
-}
-
-pub fn bit_depth(image: RasterImage) -> Int {
-  let RasterImage(bit_depth:, ..) = image
-  bit_depth
 }
 
 type TextChunk =
@@ -202,7 +182,7 @@ fn do_jxl_transcode_from_jpeg(
 fn do_jxl_transcode_to_jpeg(jxl_bytes: BitArray) -> Result(BitArray, String)
 
 @external(erlang, "imagex_c", "pdf_load_document")
-fn pdf_load_document(bytes: BitArray) -> Result(ImageType, String)
+fn pdf_load_document(bytes: BitArray) -> Result(PdfHandle, String)
 
 @external(erlang, "imagex_c", "pdf_render_page")
 fn pdf_render_page_data(
@@ -212,43 +192,67 @@ fn pdf_render_page_data(
 ) -> DecompressResult
 
 @external(erlang, "imagex_c", "tiff_load_document")
-fn tiff_load_document(bytes: BitArray) -> Result(ImageType, String)
+fn tiff_load_document(bytes: BitArray) -> Result(TiffHandle, String)
 
 @external(erlang, "imagex_c", "tiff_render_page")
 fn tiff_render_page_data(ref: Reference, page_index: Int) -> DecompressResult
 
 pub fn detect(bytes: BitArray) -> Option(Format) {
-  case internal_detect.detect(bytes) {
-    Some(internal_detect.Jpeg) -> Some(RasterFormat(Jpeg))
-    Some(internal_detect.Png) -> Some(RasterFormat(Png))
-    Some(internal_detect.Jxl) -> Some(RasterFormat(Jxl))
-    Some(internal_detect.Bmp) -> Some(RasterFormat(Bmp))
-    Some(internal_detect.Ppm) -> Some(RasterFormat(Ppm))
-    Some(internal_detect.Pdf) -> Some(PdfFormat)
-    Some(internal_detect.Tiff) -> Some(TiffFormat)
-    None -> None
+  case bytes {
+    <<0xFFD8:size(16), _rest:bits>> -> Some(RasterFormat(Jpeg))
+
+    <<0x89, "PNG\r\n":utf8, 0x1A, 0x0A, _rest:bytes>> -> Some(RasterFormat(Png))
+
+    <<0xFF, 0x0A, _rest:bytes>> -> Some(RasterFormat(Jxl))
+
+    <<0x00, 0x00, 0x00, 0x0C, "JXL ":utf8, 0x0D, 0x0A, 0x87, 0x0A, _rest:bytes>> ->
+      Some(RasterFormat(Jxl))
+
+    <<"BM":utf8, _rest:bytes>> -> Some(RasterFormat(Bmp))
+
+    <<"P":utf8, n:size(8), "\n":utf8, _rest:bytes>> if n == 53 || n == 54 ->
+      Some(RasterFormat(Ppm))
+
+    <<"II":utf8, 0x2A00:size(16), _rest:bytes>> -> Some(TiffFormat)
+
+    <<"MM":utf8, 0x002A:size(16), _rest:bytes>> -> Some(TiffFormat)
+
+    <<"%PDF-1.":utf8, n:size(8), "\n%":utf8, _rest:bytes>>
+      if n >= 48 && n <= 57
+    -> Some(PdfFormat)
+
+    _ -> None
   }
 }
 
 pub fn decode(bytes: BitArray) -> Result(Decoded, Error) {
   case detect(bytes) {
-    Some(RasterFormat(Jpeg)) -> decompress(jpeg_decompress(bytes))
-    Some(RasterFormat(Png)) -> decompress(png_decompress(bytes))
-    Some(RasterFormat(Jxl)) -> decompress(jxl_decompress(bytes))
-    Some(RasterFormat(Bmp)) -> decode_raster_format(bmp.decode(bytes))
-    Some(RasterFormat(Ppm)) -> decode_raster_format(ppm.decode(bytes))
-    Some(TiffFormat) -> decode_document(tiff_load_document(bytes))
-    Some(PdfFormat) -> decode_document(pdf_load_document(bytes))
-    None -> Error(UnknownFormat)
+    Some(PdfFormat) -> load_pdf(bytes)
+    Some(TiffFormat) -> load_tiff(bytes)
+    Some(RasterFormat(_)) | None -> {
+      use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
+      Ok(Raster(image))
+    }
   }
 }
 
 pub fn decode_raster(bytes: BitArray) -> Result(RasterImage, Error) {
-  use decoded <- result.try(decode(bytes))
+  use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
+  Ok(image)
+}
 
-  case decoded {
-    Raster(image) -> Ok(image)
-    Pdf(_) | Tiff(_) -> Error(InvalidImage("Expected a raster image"))
+pub fn decode_raster_with_metadata(
+  bytes: BitArray,
+) -> Result(#(RasterImage, RasterMetadata), Error) {
+  case detect(bytes) {
+    Some(RasterFormat(Jpeg)) -> to_raster_parts(jpeg_decompress(bytes))
+    Some(RasterFormat(Png)) -> to_raster_parts(png_decompress(bytes))
+    Some(RasterFormat(Jxl)) -> to_raster_parts(jxl_decompress(bytes))
+    Some(RasterFormat(Bmp)) -> internal_raster_parts(bmp.decode(bytes))
+    Some(RasterFormat(Ppm)) -> internal_raster_parts(ppm.decode(bytes))
+    Some(PdfFormat) | Some(TiffFormat) ->
+      Error(InvalidImage("Expected a raster image"))
+    None -> Error(UnknownFormat)
   }
 }
 
@@ -366,7 +370,7 @@ pub fn render_pdf_page(
   dpi: Int,
 ) -> Result(RasterImage, Error) {
   let PdfDocument(ref, _) = document
-  render_page(pdf_render_page_data(ref, page_index, dpi))
+  to_raster_image(pdf_render_page_data(ref, page_index, dpi))
 }
 
 pub fn render_tiff_page(
@@ -374,7 +378,7 @@ pub fn render_tiff_page(
   page_index: Int,
 ) -> Result(RasterImage, Error) {
   let TiffDocument(ref, _) = document
-  render_page(tiff_render_page_data(ref, page_index))
+  to_raster_image(tiff_render_page_data(ref, page_index))
 }
 
 pub fn pdf_pages(document: PdfDocument) -> Int {
@@ -419,6 +423,64 @@ pub fn jxl_transcode_to_jpeg(jxl_bytes: BitArray) -> Result(BitArray, Error) {
   |> result.map_error(NativeError)
 }
 
+fn load_pdf(bytes: BitArray) -> Result(Decoded, Error) {
+  use handle <- result.try(result.map_error(
+    pdf_load_document(bytes),
+    NativeError,
+  ))
+  let PDFImage(ref:, num_pages:) = handle
+  Ok(Pdf(PdfDocument(ref:, pages: num_pages)))
+}
+
+fn load_tiff(bytes: BitArray) -> Result(Decoded, Error) {
+  use handle <- result.try(result.map_error(
+    tiff_load_document(bytes),
+    NativeError,
+  ))
+  let TIFFImage(ref:, num_pages:) = handle
+  Ok(Tiff(TiffDocument(ref:, pages: num_pages)))
+}
+
+fn to_raster_image(rendered: DecompressResult) -> Result(RasterImage, Error) {
+  use #(image, _metadata) <- result.try(to_raster_parts(rendered))
+  Ok(image)
+}
+
+fn to_raster_parts(
+  rendered: DecompressResult,
+) -> Result(#(RasterImage, RasterMetadata), Error) {
+  use
+    #(pixels, width, height, channels, bit_depth, exif, text_chunks, xml, jumb)
+  <- result.try(result.map_error(rendered, NativeError))
+
+  let image = RasterImage(pixels:, width:, height:, channels:, bit_depth:)
+  let metadata =
+    RasterMetadata(
+      exif:,
+      text_chunks: list.filter_map(text_chunks, from_text_chunk),
+      xml_boxes: xml,
+      jumb_boxes: jumb,
+    )
+  Ok(#(image, metadata))
+}
+
+fn internal_raster_parts(
+  decoded: Result(Image, String),
+) -> Result(#(RasterImage, RasterMetadata), Error) {
+  case decoded {
+    Ok(Image(pixels:, width:, height:, channels:, bit_depth:)) ->
+      Ok(#(
+        RasterImage(pixels:, width:, height:, channels:, bit_depth:),
+        empty_metadata(),
+      ))
+    Error(reason) -> Error(InvalidImage(reason))
+  }
+}
+
+fn empty_metadata() -> RasterMetadata {
+  RasterMetadata(exif: None, text_chunks: [], xml_boxes: [], jumb_boxes: [])
+}
+
 fn to_text_chunk(chunk: PngTextChunk) -> TextChunk {
   let PngTextChunk(keyword, text, language_tag, translated_keyword) = chunk
   #(<<keyword:utf8>>, <<text:utf8>>, <<language_tag:utf8>>, <<
@@ -426,43 +488,17 @@ fn to_text_chunk(chunk: PngTextChunk) -> TextChunk {
   >>)
 }
 
+// Chunks whose fields are not valid UTF-8 are dropped.
+fn from_text_chunk(chunk: TextChunk) -> Result(PngTextChunk, Nil) {
+  let #(keyword, text, language_tag, translated_keyword) = chunk
+  use keyword <- result.try(bit_array.to_string(keyword))
+  use text <- result.try(bit_array.to_string(text))
+  use language_tag <- result.try(bit_array.to_string(language_tag))
+  use translated_keyword <- result.try(bit_array.to_string(translated_keyword))
+  Ok(PngTextChunk(keyword:, text:, language_tag:, translated_keyword:))
+}
+
 fn to_jxl_box(box: JxlBox) -> #(String, BitArray) {
   let JxlBox(name, contents) = box
   #(name, contents)
-}
-
-fn decompress(rendered: DecompressResult) -> Result(Decoded, Error) {
-  use image <- result.try(render_page(rendered))
-  Ok(Raster(image))
-}
-
-fn render_page(rendered: DecompressResult) -> Result(RasterImage, Error) {
-  use #(pixels, width, height, channels, bit_depth, _, _, _, _) <- result.try(
-    result.map_error(rendered, NativeError),
-  )
-  Ok(RasterImage(pixels:, width:, height:, channels:, bit_depth:))
-}
-
-fn decode_raster_format(
-  image: Result(ImageType, String),
-) -> Result(Decoded, Error) {
-  use image <- result.try(result.map_error(image, InvalidImage))
-
-  case image {
-    Image(pixels:, width:, height:, channels:, bit_depth:) ->
-      Ok(Raster(RasterImage(pixels:, width:, height:, channels:, bit_depth:)))
-    _ -> Error(InvalidImage("Expected a raster image"))
-  }
-}
-
-fn decode_document(
-  document: Result(ImageType, String),
-) -> Result(Decoded, Error) {
-  use document <- result.try(result.map_error(document, NativeError))
-
-  case document {
-    PDFImage(ref, pages) -> Ok(Pdf(PdfDocument(ref:, pages:)))
-    TIFFImage(ref, pages) -> Ok(Tiff(TiffDocument(ref:, pages:)))
-    _ -> Error(InvalidImage("Expected a document"))
-  }
 }

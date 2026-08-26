@@ -2,7 +2,7 @@
 
 ## Project Shape
 - This is a Gleam package targeting Erlang only; `gleam.toml` requires Gleam `>= 1.16.0`.
-- Public API lives in `src/gleam_image.gleam`; BMP/PPM/detection are pure Gleam internals under `src/gleam_image/internal/`.
+- Public API lives in `src/gleam_image.gleam`; BMP/PPM decoders are pure Gleam internals under `src/gleam_image/internal/`; format detection lives in the public module.
 - Native image/PDF/TIFF work is routed through `src/imagex_c.erl`, which loads `priv/imagex_c.so`; the C++ NIF implementation is all in `native/src/imagex.cpp`.
 - PDF and TIFF documents are opaque native resource handles; page indices are zero-based.
 
