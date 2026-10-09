@@ -1,8 +1,11 @@
+// libwebp handles pixels; this module handles static RIFF metadata without libwebpmux.
+// EXIF remains raw TIFF bytes and XMP remains an uninterpreted payload.
 import gleam/bit_array
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 
+// Four-byte chunk identifier and payload; size and padding are framing, not data.
 type Chunk =
   #(BitArray, BitArray)
 
@@ -13,6 +16,7 @@ pub fn prepare_pixels(
   channels: Int,
   bit_depth: Int,
 ) -> Result(#(BitArray, Int), String) {
+  // RasterImage is caller-constructed, so validate its layout before expanding it.
   let size = bit_array.byte_size(pixels)
 
   case bit_depth, channels {
@@ -31,6 +35,7 @@ fn expand_grayscale(
   channels: Int,
   acc: List(BitArray),
 ) -> BitArray {
+  // Accumulate small pixel blocks, then concatenate once to avoid repeated copies.
   case pixels, channels {
     <<gray, rest:bytes>>, 1 ->
       expand_grayscale(rest, channels, [<<gray, gray, gray>>, ..acc])
@@ -56,12 +61,15 @@ pub fn put_metadata(
       // Simple VP8/VP8L output needs a VP8X header to advertise metadata.
       let flags =
         flag(alpha, 0x10) + flag(exif != None, 0x08) + flag(xmp != None, 0x04)
+      // VP8X stores each canvas dimension minus one in a 24-bit little-endian field.
       let header = <<
         flags,
         0:24,
         { width - 1 }:24-little,
         { height - 1 }:24-little,
       >>
+
+      // Replace framing/metadata, keeping the encoded pixel and alpha chunks intact.
       let image_chunks =
         list.filter(chunks, fn(chunk) {
           let #(tag, _) = chunk
@@ -69,12 +77,15 @@ pub fn put_metadata(
           && tag != <<"EXIF":utf8>>
           && tag != <<"XMP ":utf8>>
         })
+
+      // VP8X precedes image data; EXIF and XMP follow it.
       let chunks =
         list.append(
           [#(<<"VP8X":utf8>>, header), ..image_chunks],
           list.append(metadata_chunk("EXIF", exif), metadata_chunk("XMP ", xmp)),
         )
       let body = list.map(chunks, encode_chunk) |> bit_array.concat
+      // RIFF size includes the WEBP identifier but excludes RIFF and its size field.
       let size = bit_array.byte_size(body) + 4
       Ok(<<"RIFF":utf8, size:32-little, "WEBP":utf8, body:bits>>)
     }
@@ -98,6 +109,7 @@ fn metadata_chunk(tag: String, contents: Option(BitArray)) -> List(Chunk) {
 fn encode_chunk(chunk: Chunk) -> BitArray {
   let #(tag, data) = chunk
   let size = bit_array.byte_size(data)
+  // RIFF lengths count payload bytes only, not the optional trailing pad byte.
   let padding = { size % 2 } * 8
   <<tag:bits, size:32-little, data:bits, 0:size(padding)>>
 }
@@ -105,6 +117,8 @@ fn encode_chunk(chunk: Chunk) -> BitArray {
 pub fn read_metadata(
   bytes: BitArray,
 ) -> Result(#(Option(BitArray), Option(BitArray)), String) {
+  // Accept EXIF with or without the JPEG-style identifier; expose TIFF in both cases.
+  // Do not turn malformed chunk framing into silently absent metadata.
   use chunks <- result.try(read_chunks(bytes))
   Ok(
     list.fold(chunks, #(None, None), fn(metadata, chunk) {

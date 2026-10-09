@@ -15,6 +15,8 @@ fn fixture_expectations() -> List(#(String, Int, Int, Int, String))
 @external(erlang, "webp_test_ffi", "sha256")
 fn sha256(bytes: BitArray) -> String
 
+// Upstream vectors cover VP8, VP8L, near-lossless, and compressed/uncompressed alpha.
+// Shapes and full pixel hashes come from Pillow, not from our own encoder.
 pub fn independent_fixtures_test() {
   list.each(fixture_expectations(), fn(expected) {
     let #(filename, width, height, channels, hash) = expected
@@ -34,12 +36,15 @@ pub fn independent_fixtures_test() {
   })
 }
 
+// Pillow copied this JPEG's EXIF into RGB and RGBA WebP fixtures. Comparing the
+// complete TIFF payload checks all fields and thumbnail bytes, not just one tag.
 pub fn independent_exif_xmp_roundtrip_test() {
   let assert Ok(source) =
     read_bits(
       "test/assets/exif/exif-jpeg-thumbnail-sony-dsc-p150-inverted-colors.jpg",
     )
-  // Extract the original JPEG APP1 payload, including the thumbnail, independently.
+  // This fixture starts with APP1. Its length includes two size bytes and the
+  // six-byte Exif identifier, so subtract eight to isolate the raw TIFF payload.
   let assert <<0xFF, 0xD8, 0xFF, 0xE1, size:16-big, rest:bytes>> = source
   let assert <<"Exif":utf8, 0, 0, exif:bytes-size(size - 8), _rest:bytes>> =
     rest
@@ -56,6 +61,7 @@ pub fn independent_exif_xmp_roundtrip_test() {
       _ -> Some(xmp)
     }
     metadata.xmp |> should.equal(expected_xmp)
+    // Raw metadata is copied unchanged; unlike parsed EXIF, offsets need not move.
     let options =
       WebpEncodeOptions(
         ..default_webp_encode_options(),
@@ -71,6 +77,7 @@ pub fn independent_exif_xmp_roundtrip_test() {
   })
 }
 
+// XMP must survive without an EXIF chunk; neither metadata field depends on the other.
 pub fn independent_xmp_only_test() {
   let assert Ok(bytes) = read_bits("test/assets/webp/lossless-xmp.webp")
   let assert Ok(#(image, metadata)) = decode_raster_with_metadata(bytes)
@@ -86,6 +93,8 @@ pub fn independent_xmp_only_test() {
   decode_raster_with_metadata(encoded) |> should.equal(Ok(#(image, metadata)))
 }
 
+// Re-encode independently decoded images with real color/alpha variation.
+// Even a lossy source must retain its decoded pixels when encoded losslessly.
 pub fn nonuniform_lossless_roundtrip_test() {
   list.each(
     ["lossless_color_transform.webp", "lossless1.webp", "lossy_alpha1.webp"],
@@ -99,6 +108,8 @@ pub fn nonuniform_lossless_roundtrip_test() {
   )
 }
 
+// The first pixel has nonzero RGB but zero alpha. libwebp can discard those
+// invisible colors unless the encoder enables exact preservation.
 pub fn lossless_transparent_colors_test() {
   let image = RasterImage(<<20, 80, 140, 0, 70, 90, 110, 128>>, 2, 1, 4, 8)
   let options =
@@ -107,6 +118,8 @@ pub fn lossless_transparent_colors_test() {
   decode_raster(bytes) |> should.equal(Ok(image))
 }
 
+// WebP stores RGB/RGBA rather than grayscale. Replicate luminance into RGB
+// while leaving the alpha byte unchanged, including fully transparent pixels.
 pub fn grayscale_expansion_test() {
   let options =
     WebpEncodeOptions(..default_webp_encode_options(), lossless: True)
@@ -129,6 +142,7 @@ pub fn grayscale_expansion_test() {
   )
 }
 
+// Default encoding is lossy: check shape and bounded color error, not exact bytes.
 pub fn lossy_default_encode_test() {
   let image =
     RasterImage(
@@ -156,6 +170,8 @@ fn bytes_to_list(bytes: BitArray) -> List(Int) {
   }
 }
 
+// A three-byte XMP payload needs one RIFF padding byte, excluded from its length.
+// Check that neither the returned metadata nor the adjacent pixel data includes it.
 pub fn odd_metadata_padding_test() {
   let options =
     WebpEncodeOptions(
@@ -170,12 +186,15 @@ pub fn odd_metadata_padding_test() {
   metadata.xmp |> should.equal(options.xmp)
 }
 
+// Bytes after the declared RIFF extent are not chunks and must not affect metadata.
 pub fn trailing_bytes_test() {
   let assert Ok(bytes) = read_bits("test/assets/webp/lossy-alpha-exif-xmp.webp")
   decode_raster_with_metadata(<<bytes:bits, "trailing bytes":utf8>>)
   |> should.equal(decode_raster_with_metadata(bytes))
 }
 
+// Exercise the public decode path; this does not isolate the RIFF parser, since
+// libwebp may reject the truncated file before metadata parsing runs.
 pub fn truncated_file_test() {
   let assert Ok(bytes) = read_bits("test/assets/webp/lossy-alpha-exif-xmp.webp")
   let assert Ok(truncated) =
@@ -183,12 +202,15 @@ pub fn truncated_file_test() {
   let assert Error(_) = decode_raster_with_metadata(truncated)
 }
 
+// Do not silently return the first frame of an unsupported animated image.
 pub fn rejects_animation_test() {
   let assert Ok(bytes) = read_bits("test/assets/animated.webp")
   decode(bytes)
   |> should.equal(Error(NativeError("animated WebP is not supported")))
 }
 
+// Option ranges and raw-buffer consistency are semantic constraints that Gleam
+// types cannot enforce. Return typed errors before entering the native encoder.
 pub fn rejects_invalid_input_test() {
   let image = RasterImage(<<1, 2, 3>>, 1, 1, 3, 8)
   let defaults = default_webp_encode_options()

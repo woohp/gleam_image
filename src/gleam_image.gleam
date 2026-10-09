@@ -110,6 +110,9 @@ pub type JxlTranscodeOptions {
   JxlTranscodeOptions(effort: Int, store_jpeg_metadata: Bool)
 }
 
+/// Options for static WebP encoding. EXIF is raw TIFF data; XMP is a raw payload.
+/// Quality ranges from 0.0 to 100.0; in lossless mode it controls compression
+/// effort rather than pixel fidelity. Effort ranges from 0 to 6.
 pub type WebpEncodeOptions {
   WebpEncodeOptions(
     quality: Float,
@@ -268,6 +271,7 @@ pub fn decode(bytes: BitArray) -> Result(Decoded, Error) {
 
 pub fn decode_raster(bytes: BitArray) -> Result(RasterImage, Error) {
   case detect(bytes) {
+    // Pixel-only decoding need not inspect EXIF/XMP container chunks.
     Some(RasterFormat(Webp)) -> to_raster_image(webp_decompress(bytes))
     _ -> {
       use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
@@ -409,6 +413,7 @@ pub fn encode_jxl(
   }
 }
 
+/// Lossy quality 75.0, effort 4, with no metadata.
 pub fn default_webp_encode_options() -> WebpEncodeOptions {
   WebpEncodeOptions(
     quality: 75.0,
@@ -419,6 +424,9 @@ pub fn default_webp_encode_options() -> WebpEncodeOptions {
   )
 }
 
+/// Encode an 8-bit, 1–4-channel image as static WebP. Grayscale is expanded to
+/// RGB/RGBA, and lossless mode preserves RGB beneath transparent pixels.
+/// Metadata is attached separately from pixel compression; animation is unsupported.
 pub fn encode_webp(
   image: RasterImage,
   options: WebpEncodeOptions,
@@ -432,6 +440,7 @@ pub fn encode_webp(
     _, _ if effort < 0 || effort > 6 ->
       Error(InvalidOptions("WebP effort must be between 0 and 6"))
     _, _ -> {
+      // Validate the caller-provided buffer and expand grayscale before native import.
       use #(pixels, channels) <- result.try(
         webp.prepare_pixels(pixels, width, height, channels, bit_depth)
         |> result.map_error(InvalidImage),
@@ -448,6 +457,7 @@ pub fn encode_webp(
         )
         |> result.map_error(NativeError),
       )
+      // libwebp emits pixel chunks only; advertise and attach metadata in RIFF.
       webp.put_metadata(bytes, width, height, channels == 4, exif, xmp)
       |> result.map_error(InvalidImage)
     }
