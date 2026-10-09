@@ -13,7 +13,7 @@ Please ensure that libjpeg, libpng, libjxl, libtiff, libpoppler, and libwebp are
 gleam add gleam_image
 ```
 
-This package targets Erlang and requires Gleam 1.16 or newer.
+This package targets Erlang and requires Gleam 1.18 or newer.
 
 ## Usage
 
