@@ -21,14 +21,38 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential libjpeg-dev libpng-dev libjxl-dev \
-            libpoppler-cpp-dev libtiff-dev libwebp-dev
+            build-essential cmake ninja-build pkg-config \
+            libjpeg-dev libpng-dev libpoppler-cpp-dev libtiff-dev libwebp-dev \
+            libbrotli-dev libhwy-dev liblcms2-dev
+      - uses: actions/checkout@v3
+        with:
+          repository: libjxl/libjxl
+          # Exact v0.12.0 release, rather than Ubuntu's older package or a snapshot.
+          ref: a7a9c787341cf703dede03c2009fa460cae5e5df
+          path: deps/libjxl
+      - name: Build and install libjxl 0.12.0
+        run: |
+          # Build only the shared libraries against system dependencies.
+          # LCMS avoids downloading skcms solely for this CI build.
+          cmake -S deps/libjxl -B "$RUNNER_TEMP/libjxl-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_INSTALL_LIBDIR=lib \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF \
+            -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF \
+            -DJPEGXL_ENABLE_EXAMPLES=OFF -DJPEGXL_ENABLE_JNI=OFF \
+            -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF \
+            -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_SKCMS=OFF
+          cmake --build "$RUNNER_TEMP/libjxl-build" --parallel 2
+          sudo cmake --install "$RUNNER_TEMP/libjxl-build"
+          sudo ldconfig
+          test "$(pkg-config --modversion libjxl)" = "0.12.0"
+          test "$(pkg-config --modversion libjxl_threads)" = "0.12.0"
       - uses: actions/checkout@v3
         with:
           repository: woohp/expp
           ref: 14642c4894db6330cce1329d0caf5079e2be7e38
           path: deps/expp
       - run: gleam deps download
-      - run: make priv/imagex_c.so
+      - run: make priv/imagex_c.so LDFLAGS=-L/usr/local/lib
       - run: gleam test
       - run: gleam format --check src test
