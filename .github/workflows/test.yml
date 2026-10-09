@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: ghcr.io/gleam-lang/gleam:v1.16.0-erlang
+    container: ghcr.io/gleam-lang/gleam:v1.18.0-erlang
     defaults:
       run:
         # Container jobs otherwise default to sh; the fingerprint step uses pipefail.
