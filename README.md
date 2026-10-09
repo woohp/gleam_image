@@ -1,13 +1,13 @@
 # gleam_image
 
-Load and save images from Gleam, using libjpeg, libpng, libjxl, libtiff, and poppler as native backends.
-Formats supported include JPEG, PNG, BMP, JPEG XL, PPM, TIFF, and PDF.
+Load and save images from Gleam, using libjpeg, libpng, libjxl, libtiff, poppler, and libwebp as native backends.
+Formats supported include JPEG, PNG, BMP, JPEG XL, PPM, TIFF, PDF, and static WebP.
 
 Where possible, yielding NIFs are used so the native work plays nicely with the BEAM scheduler.
 
 ## Install
 
-Please ensure that libjpeg, libpng, libjxl, libtiff, and libpoppler are installed.
+Please ensure that libjpeg, libpng, libjxl, libtiff, libpoppler, and libwebp are installed. WebP does not require libwebpmux.
 
 ```sh
 gleam add gleam_image
@@ -56,7 +56,7 @@ pub fn is_jpeg(bytes) {
 Save to memory in a specific raster format using default options:
 
 ```gleam
-import gleam_image.{Bmp, Jpeg, Jxl, Png, Ppm, encode}
+import gleam_image.{Bmp, Jpeg, Jxl, Png, Ppm, Webp, encode}
 
 pub fn encode_examples(image) {
   let assert Ok(jpeg_bytes) = encode(image, Jpeg)
@@ -64,6 +64,7 @@ pub fn encode_examples(image) {
   let assert Ok(jxl_bytes) = encode(image, Jxl)
   let assert Ok(bmp_bytes) = encode(image, Bmp)
   let assert Ok(ppm_bytes) = encode(image, Ppm)
+  let assert Ok(webp_bytes) = encode(image, Webp)
 }
 ```
 
@@ -117,7 +118,7 @@ Use `decode_raster` or `read_raster` when callers require a raster image. They r
 
 ## Encoding options
 
-For encoder-specific options use `encode_jpeg`, `encode_png`, or `encode_jxl` with their `default_*_encode_options` helpers.
+For encoder-specific options use `encode_jpeg`, `encode_png`, `encode_jxl`, or `encode_webp` with their `default_*_encode_options` helpers.
 
 ### JPEG
 
@@ -197,6 +198,14 @@ pub fn encode_lossless_jxl(image, exif) {
 
 JXL boxes use the named `JxlBox(name, contents)` type rather than raw tuples.
 
+WebP options use `WebpEncodeOptions(..default_webp_encode_options(), ...)`:
+`quality` (0.0–100.0, default 75.0), `lossless` (default False), `effort`
+(0–6, default 4), and optional raw `exif` and `xmp` bit arrays. Lossless quality
+controls compression effort rather than pixel fidelity. Encoding accepts 8-bit
+images with 1–4 channels and expands grayscale to RGB/RGBA; decoding returns
+RGB/RGBA. Lossless encoding preserves colors beneath transparent pixels.
+Animated WebP is rejected, and ICC color management is not supported.
+
 ## Documents
 
 PDF and TIFF files decode to opaque document handles. Page indices are zero-based. Valid page indices are `0 <= page_index < pdf_pages(pdf)` or `0 <= page_index < tiff_pages(tiff)`.
@@ -256,6 +265,7 @@ Encode options accept metadata where the backend supports writing it:
 - JPEG: EXIF and XMP via `JpegEncodeOptions`
 - PNG: text chunks via `PngEncodeOptions`
 - JPEG XL: EXIF and container boxes via `JxlEncodeOptions`
+- WebP: EXIF and XMP via `WebpEncodeOptions`
 
 Use `decode_raster_with_metadata` to read metadata back when decoding:
 
@@ -275,6 +285,7 @@ pub type RasterMetadata {
     text_chunks: List(PngTextChunk),
     xml_boxes: List(BitArray),
     jumb_boxes: List(BitArray),
+    xmp: Option(BitArray),
   )
 }
 ```
@@ -284,6 +295,9 @@ Which fields are populated depends on the source format:
 - PNG fills `exif` and `text_chunks`.
 - JPEG XL fills `exif`, `xml_boxes`, and `jumb_boxes`.
 - JPEG, BMP, and PPM currently yield empty metadata (the native backend does not read JPEG EXIF yet).
+- WebP fills `exif` with raw TIFF bytes and `xmp` with the raw XMP payload.
+  `decode_raster` decodes WebP pixels without reading metadata; use
+  `decode_raster_with_metadata` when metadata is needed.
 
 ## Errors
 
@@ -315,7 +329,7 @@ Build the native backend before running image, PDF, or TIFF tests:
 make priv/imagex_c.so
 ```
 
-Run tests:
+Run tests (Erlang/OTP 27 or newer is needed for the fixture JSON reader):
 
 ```sh
 gleam test

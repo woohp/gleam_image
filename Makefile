@@ -4,7 +4,7 @@ ERTS_INCLUDE_DIR ?= $(ERL_EI_INCLUDE_DIR)
 ifeq ($(ERTS_INCLUDE_DIR),)
     ERTS_INCLUDE_DIR = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)
 endif
-EXPP_INCLUDE_DIR ?= $(shell if [ -f deps/expp/expp.hpp ]; then pwd -P; elif [ -f ../expp/expp.hpp ]; then cd ../expp && pwd -P; fi)
+EXPP_INCLUDE_DIR ?= $(shell if [ -f deps/expp/expp.hpp ]; then cd deps/expp && pwd -P; elif [ -f ../expp/expp.hpp ]; then cd ../expp && pwd -P; fi)
 ifeq ($(EXPP_INCLUDE_DIR),)
     $(error EXPP_INCLUDE_DIR is not set. Set it to the directory containing expp.hpp, or place expp at deps/expp or ../expp)
 endif
@@ -25,7 +25,7 @@ all: imagex_c
 imagex_c: priv/imagex_c.so
 
 priv/imagex_c.so: priv native/src/imagex.cpp
-	$(CXX) $(CFLAGS) -shared $(LDFLAGS) -o $@ native/src/imagex.cpp -ljpeg -lpng -ljxl -ljxl_threads -lpoppler-cpp -ltiff -ltiffxx
+	$(CXX) $(CFLAGS) -shared $(LDFLAGS) -o $@ native/src/imagex.cpp -ljpeg -lpng -ljxl -ljxl_threads -lpoppler-cpp -ltiff -ltiffxx -lwebp
 
 priv:
 	@mkdir -p priv

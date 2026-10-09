@@ -2,11 +2,11 @@
 -export([jpeg_decompress/1, jpeg_compress/7, png_decompress/1, png_compress/6,
          jxl_decompress/1, jxl_compress/12, jxl_transcode_from_jpeg/3,
          jxl_transcode_to_jpeg/1, pdf_load_document/1, pdf_render_page/3,
-         tiff_load_document/1, tiff_render_page/2]).
+         tiff_load_document/1, tiff_render_page/2, webp_decompress/1, webp_compress/7]).
 -nifs([jpeg_decompress/1, jpeg_compress/7, png_decompress/1, png_compress/6,
          jxl_decompress/1, jxl_compress/12, jxl_transcode_from_jpeg/3,
          jxl_transcode_to_jpeg/1, pdf_load_document/1, pdf_render_page/3,
-         tiff_load_document/1, tiff_render_page/2]).
+         tiff_load_document/1, tiff_render_page/2, webp_decompress/1, webp_compress/7]).
 -on_load(init/0).
 
 init() ->
@@ -51,4 +51,10 @@ tiff_load_document(_bytes) ->
     exit(nif_library_not_loaded).
 
 tiff_render_page(_document, _page_idx) ->
+    exit(nif_library_not_loaded).
+
+webp_decompress(_bytes) ->
+    exit(nif_library_not_loaded).
+
+webp_compress(_pixels, _width, _height, _channels, _quality, _lossless, _effort) ->
     exit(nif_library_not_loaded).

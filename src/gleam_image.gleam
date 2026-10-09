@@ -8,6 +8,7 @@ import gleam_image/internal/image.{
   type Image, type PdfHandle, type TiffHandle, Image, PDFImage, TIFFImage,
 }
 import gleam_image/internal/ppm
+import gleam_image/internal/webp
 import simplifile.{type FileError, read_bits}
 
 pub type RasterImage {
@@ -22,7 +23,8 @@ pub type RasterImage {
 
 /// Metadata extracted while decoding a raster image. Which fields are
 /// populated depends on the source format: PNG can carry EXIF and text
-/// chunks, JXL can carry EXIF and xml/jumb boxes. JPEG, BMP, and PPM
+/// chunks, JXL can carry EXIF and xml/jumb boxes, and WebP can carry EXIF
+/// and XMP. JPEG, BMP, and PPM
 /// currently yield no metadata.
 pub type RasterMetadata {
   RasterMetadata(
@@ -30,6 +32,7 @@ pub type RasterMetadata {
     text_chunks: List(PngTextChunk),
     xml_boxes: List(BitArray),
     jumb_boxes: List(BitArray),
+    xmp: Option(BitArray),
   )
 }
 
@@ -59,6 +62,7 @@ pub type RasterFormat {
   Jxl
   Bmp
   Ppm
+  Webp
 }
 
 pub type Error {
@@ -104,6 +108,16 @@ pub type JxlEncodeOptions {
 
 pub type JxlTranscodeOptions {
   JxlTranscodeOptions(effort: Int, store_jpeg_metadata: Bool)
+}
+
+pub type WebpEncodeOptions {
+  WebpEncodeOptions(
+    quality: Float,
+    lossless: Bool,
+    effort: Int,
+    exif: Option(BitArray),
+    xmp: Option(BitArray),
+  )
 }
 
 type TextChunk =
@@ -197,6 +211,20 @@ fn tiff_load_document(bytes: BitArray) -> Result(TiffHandle, String)
 @external(erlang, "imagex_c", "tiff_render_page")
 fn tiff_render_page_data(ref: Reference, page_index: Int) -> DecompressResult
 
+@external(erlang, "imagex_c", "webp_decompress")
+fn webp_decompress(bytes: BitArray) -> DecompressResult
+
+@external(erlang, "imagex_c", "webp_compress")
+fn webp_compress(
+  pixels: BitArray,
+  width: Int,
+  height: Int,
+  channels: Int,
+  quality: Float,
+  lossless: Bool,
+  effort: Int,
+) -> Result(BitArray, String)
+
 pub fn detect(bytes: BitArray) -> Option(Format) {
   case bytes {
     <<0xFFD8:size(16), _rest:bits>> -> Some(RasterFormat(Jpeg))
@@ -221,6 +249,9 @@ pub fn detect(bytes: BitArray) -> Option(Format) {
       if n >= 48 && n <= 57
     -> Some(PdfFormat)
 
+    <<"RIFF":utf8, _size:32-little, "WEBP":utf8, _rest:bytes>> ->
+      Some(RasterFormat(Webp))
+
     _ -> None
   }
 }
@@ -230,15 +261,19 @@ pub fn decode(bytes: BitArray) -> Result(Decoded, Error) {
     Some(PdfFormat) -> load_pdf(bytes)
     Some(TiffFormat) -> load_tiff(bytes)
     Some(RasterFormat(_)) | None -> {
-      use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
-      Ok(Raster(image))
+      decode_raster(bytes) |> result.map(Raster)
     }
   }
 }
 
 pub fn decode_raster(bytes: BitArray) -> Result(RasterImage, Error) {
-  use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
-  Ok(image)
+  case detect(bytes) {
+    Some(RasterFormat(Webp)) -> to_raster_image(webp_decompress(bytes))
+    _ -> {
+      use #(image, _metadata) <- result.try(decode_raster_with_metadata(bytes))
+      Ok(image)
+    }
+  }
 }
 
 pub fn decode_raster_with_metadata(
@@ -250,6 +285,15 @@ pub fn decode_raster_with_metadata(
     Some(RasterFormat(Jxl)) -> to_raster_parts(jxl_decompress(bytes))
     Some(RasterFormat(Bmp)) -> internal_raster_parts(bmp.decode(bytes))
     Some(RasterFormat(Ppm)) -> internal_raster_parts(ppm.decode(bytes))
+    Some(RasterFormat(Webp)) -> {
+      use #(image, metadata) <- result.try(
+        to_raster_parts(webp_decompress(bytes)),
+      )
+      use #(exif, xmp) <- result.try(
+        webp.read_metadata(bytes) |> result.map_error(InvalidImage),
+      )
+      Ok(#(image, RasterMetadata(..metadata, exif: exif, xmp: xmp)))
+    }
     Some(PdfFormat) | Some(TiffFormat) ->
       Error(InvalidImage("Expected a raster image"))
     None -> Error(UnknownFormat)
@@ -272,6 +316,7 @@ pub fn encode(
     Ppm ->
       ppm.encode(pixels, width, height, channels, bit_depth)
       |> result.map_error(NativeError)
+    Webp -> encode_webp(image, default_webp_encode_options())
   }
 }
 
@@ -361,6 +406,51 @@ pub fn encode_jxl(
         order,
       )
       |> result.map_error(NativeError)
+  }
+}
+
+pub fn default_webp_encode_options() -> WebpEncodeOptions {
+  WebpEncodeOptions(
+    quality: 75.0,
+    lossless: False,
+    effort: 4,
+    exif: None,
+    xmp: None,
+  )
+}
+
+pub fn encode_webp(
+  image: RasterImage,
+  options: WebpEncodeOptions,
+) -> Result(BitArray, Error) {
+  let RasterImage(pixels:, width:, height:, channels:, bit_depth:) = image
+  let WebpEncodeOptions(quality:, lossless:, effort:, exif:, xmp:) = options
+
+  case quality, effort {
+    _, _ if quality <. 0.0 || quality >. 100.0 ->
+      Error(InvalidOptions("WebP quality must be between 0 and 100"))
+    _, _ if effort < 0 || effort > 6 ->
+      Error(InvalidOptions("WebP effort must be between 0 and 6"))
+    _, _ -> {
+      use #(pixels, channels) <- result.try(
+        webp.prepare_pixels(pixels, width, height, channels, bit_depth)
+        |> result.map_error(InvalidImage),
+      )
+      use bytes <- result.try(
+        webp_compress(
+          pixels,
+          width,
+          height,
+          channels,
+          quality,
+          lossless,
+          effort,
+        )
+        |> result.map_error(NativeError),
+      )
+      webp.put_metadata(bytes, width, height, channels == 4, exif, xmp)
+      |> result.map_error(InvalidImage)
+    }
   }
 }
 
@@ -460,6 +550,7 @@ fn to_raster_parts(
       text_chunks: list.filter_map(text_chunks, from_text_chunk),
       xml_boxes: xml,
       jumb_boxes: jumb,
+      xmp: None,
     )
   Ok(#(image, metadata))
 }
@@ -478,7 +569,13 @@ fn internal_raster_parts(
 }
 
 fn empty_metadata() -> RasterMetadata {
-  RasterMetadata(exif: None, text_chunks: [], xml_boxes: [], jumb_boxes: [])
+  RasterMetadata(
+    exif: None,
+    text_chunks: [],
+    xml_boxes: [],
+    jumb_boxes: [],
+    xmp: None,
+  )
 }
 
 fn to_text_chunk(chunk: PngTextChunk) -> TextChunk {
